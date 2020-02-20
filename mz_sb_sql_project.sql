@@ -149,46 +149,41 @@ facility, the name of the member formatted as a single column, and the cost.
 Order by descending cost, and do not use any subqueries. */
 
 
-SELECT fc.name as facility_name,
-	   CONCAT(mm.firstname, " ", mm.surname) as member_name,
-	   CASE WHEN bk.memid = 0 THEN fc.guestcost * SUM(slots) 
-			ELSE fc.membercost * SUM(slots) END AS cost
-FROM Bookings bk
-JOIN Facilities fc
-ON bk.facid = fc.facid
-JOIN Members mm
-ON bk.memid = mm.memid 
+
+
+SELECT fc.name AS facility_name,
+	   CONCAT(mm.firstname, " ",mm.surname) as member_name,
+	   CASE WHEN mm.memid = 0 THEN bk.slots * fc.guestcost
+	   		ELSE bk.slots * fc.membercost 
+	   		END AS cost 
+FROM Members mm
+JOIN Bookings bk ON mm.memid = bk.memid 
+JOIN Facilities fc ON bk.facid = fc.facid 
 WHERE LEFT( starttime, 10 ) = '2012-09-14'
-GROUP BY 1,2
-HAVING cost > 30
-ORDER BY cost DESC
+AND ((mm.memid = 0 AND bk.slots * fc.membercost > 30)
+OR (mm.memid != 0 AND bk.slots * fc.membercost >30))
+ORDER BY cost DESC 
+
 
 
 /* Q9: This time, produce the same result as in Q8, but using a subquery. */
 
 
-SELECT  
- 		fc.name as facility_name,
- 		concat(firstname, " ", surname) as member_name,
-		CASE WHEN bk.memid = 0 THEN num_slots * guestcost 
-			ELSE num_slots * membercost END AS cost
-FROM Facilities fc 
-JOIN 
-(
-SELECT facid,
-	   memid,
-	   SUM(slots) as num_slots 
-FROM Bookings
+SELECT facility_name, member_name, cost
+FROM (
+SELECT 
+	   fc.name AS facility_name,
+	   CONCAT(mm.firstname, " ",mm.surname) as member_name,
+	   CASE WHEN mm.memid = 0 THEN bk.slots * fc.guestcost
+	   		ELSE bk.slots * fc.membercost 
+	   		END AS cost 
+FROM Members mm
+JOIN Bookings bk ON mm.memid = bk.memid 
+JOIN Facilities fc ON bk.facid = fc.facid 
 WHERE LEFT( starttime, 10 ) = '2012-09-14'
-GROUP BY 1,2
-) bk 
-ON fc.facid = bk.facid
-JOIN Members mm
-ON bk.memid = mm.memid
-WHERE CASE WHEN bk.memid = 0 THEN num_slots * guestcost 
-			ELSE num_slots * membercost END > 30
-ORDER BY cost desc
-
+) AS bks
+WHERE cost >30
+ORDER BY cost DESC
 
 
 /* Q10: Produce a list of facilities with a total revenue less than 1000.
@@ -196,41 +191,18 @@ The output of facility name and total revenue, sorted by revenue. Remember
 that there's a different cost for guests and members! */
 
 
-SELECT fc.name as facility_name,
-	   CASE WHEN bk.memid = 0 THEN fc.guestcost * SUM(slots) 
-			ELSE fc.membercost * SUM(slots) END AS revenue
-FROM Bookings bk
-JOIN Facilities fc
-ON bk.facid = fc.facid
-JOIN Members mm
-ON bk.memid = mm.memid 
-GROUP BY 1
-HAVING revenue < 1000
-ORDER BY revenue DESC
--- $0? 
 
--- To Double-Check
-
-SELECT facility_name,
-	   CASE WHEN guest_label = 0 THEN num_slots * guestcost 
-			ELSE num_slots * membercost 
-		END AS revenue 
+SELECT facility_name, 
+	   revenue 
 FROM 
 (
-SELECT  bk.facid as facid, 
-		fc.name as facility_name,
-		CASE WHEN bk.memid = 0 then 1 else 0 end as guest_label,
-		fc.guestcost,
-		fc.membercost,
-		sum(slots) as num_slots
+SELECT facility_name,
+	   SUM(CASE WHEN memid = 0 THEN slots * fc.guestcost 
+			ELSE slots * membercost 
+		END) AS revenue 
 FROM Bookings bk
-JOIN Facilities fc
-ON bk.facid = fc.facid
-GROUP BY 1,2,3,4,5
-) a
-where CASE WHEN guest_label = 0 THEN num_slots * guestcost 
-			ELSE num_slots * membercost 
-		END < 1000
-order by 2 desc
-
-
+JOIN Facilities fc ON bk.facid = fc.facid 
+GROUP BY 1
+) AS fcs 
+WHERE revenue < 1000 
+ORDER BY 2
